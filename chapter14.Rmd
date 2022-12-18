@@ -1,0 +1,146 @@
+---
+title: "BDA: Chapter 14 exercices"
+author: "OS"
+---
+
+# Exercice 5
+
+Can't have a pertinent discussion until having thougroly read chapter 8.
+
+# Exercice 6
+
+Too tedious. Most essential conditions is that $n > k$ where $n$ is the number
+of observations and $k$ is the number of linearly idependent covariates. This
+is required so that $X^TX$ has full rank and is thus invertablle. If this
+condition is not respected then the variance estimator $\sigma^2$ is also
+undefined.
+
+# Exercice 7
+
+I cheated and this is essentially taken from the solutions page.
+
+So we have 
+\begin{equation}
+p(\tilde{y}, \beta|\sigma, y) =
+    p(\tilde{y}|\beta, \sigma, y) p(\beta | \sigma, y)
+\end{equation}
+
+The first term is the prosterior predictive distribution, which has essentially
+the same form as the likelihood, i.e., multivariate normal, and the latter is
+the posterior distribution of $\beta$, also multivariate normal. Now, product
+of the two is an exponential of a quadratic form in something, but I'm not
+convinced that it is necessairy quadratic in $(\tilde{y}, \beta)$. (Although
+I realise that it is must be true.)
+
+I found it useful to first write what we're looking for. If $(\tilde{y}, \beta)$
+are jointly normal then they log density proportinal to 
+
+\begin{equation}
+    \def\e1{\tilde{y} - X\beta}
+    \def\e2{\beta - \hat\beta}
+    \begin{pmatrix}
+        \e1\\
+        \e2
+    \end{pmatrix}^T
+    \begin{pmatrix}
+        I\sigma^2 & A^T\\
+        A         & V_\beta\sigma^2
+    \end{pmatrix}
+    \begin{pmatrix}
+        \e1\\
+        \e2
+    \end{pmatrix}\\
+    = \e1^TI\sigma^2\e2 + \e2^TA\1e + \e1^TA^T\e2 + \e2^T(V_\beta\sigma^2)\e2
+\end{equation}
+
+Now on the other side we get.
+
+\begin{align}
+p(\tilde{y}|\beta, \sigma, y)p(\beta | \sigma, y)
+    &= N(\tilde{y}|\hat{\beta} X, I\hat{\sigma}^2) N(\beta|\hat{\beta},V_\beta\hat\sigma^2)\\
+    &\propto exp(-\frac{1}{2}(\tidle{y} - \hat\beta X)^T(I\hat\sigma^2)^-1(\tidle{y} - \hat\beta X) +
+    (\tidle{y} - \beta X)^T(I\sigma^2)^-1(\tidle{y} - \beta X))
+\end{align}
+
+Now the first and the last tem coinside perfeclty with the previous statement.
+And since theree are no other terms I conclude that $A = 0$. That is
+$\tilde y$ is idependent to $\beta$ conditionally on $(\sigma, \y)$. Which we
+kind of should have gussed.
+
+# Exercice 8
+
+Let us take a look at a model defined with the following terms
+
+\begin{equation}
+y_* = \begin{pmatrix}
+    y\\
+    \beta_0
+    \end{pmatrix},\quad
+    X_* = \begin{pmatrix}
+    X\\
+    I_k
+    \end{pmatrix},\quad
+    \Sigma_* = \begin{pmatrix}
+    \Sigma_y & 0 \\
+    0        & \Sigma_\beta
+    \end{pmatrix}.
+\end{equation}
+
+The prior is unchanged, but the likelihood is now 
+\begin{equation}
+N(y_*|X_*\beta, \Sigma_*)
+\end{equation}
+
+Now, insted of developping ths specific case might as well develop the general
+case with arbitrary variance parameters, that is $p(y|\beta, \phi) = N(y |
+X\beta, diag(\exp(W\phi)))$. Where $\phi$ is the variance parametrs and $W$ is
+the variance structure. For instance the usual case with constant variance we
+would have $\phi = 2 \log(\sigma)$ and $W = \textbf{1}$ (vector of ones).
+For convenience we note that $\Sigma = diag(\exp{(W\phi)}^{-1})$
+
+So with all that, and by completing the square as previously but this time the
+quadratic form uses the matrix $\Sigma$ instead of an identity matrix. The
+part of the posterior within the exponatial is
+
+\begin{equation}
+(\beta - (X^T\Sigma X)^{-1}X^T\Sigma y) (X^T\Sigma X)^{-1}
+(\beta - (X^T\Sigma X)^{-1}X^T\Sigma y) +
+y^T (\Sigma^{-1} - \Sigma^TX(X^T\Sigma X)^{-1}X^T\Sigma) y
+\end{equation}
+
+The rest of the posterior is equal to 
+
+\begin{equation}
+(2\pi)^{\frac{k}{2}} |\Sigma^{-1}|^{-1}
+    \exp(\text{The expression above}) \prod \phi_i^2
+\end{equation}
+
+Conditionally on $\phi$ and $y$, this a multivariate normal distribution with
+mean $(X^T\Sigma X)^{-1}X^T\Sigma y$ and $X^T\Sigma X$ variance-covariance
+matrix. Nice.
+
+Now what's left ?
+
+$$
+(2\pi)^{\frac{k}{2}} |\Sigma^{-1}|^{-1} 
+    \exp{y^T (\Sigma^{-1} - \Sigma^TX(X^T\Sigma X)^{-1}X^T\Sigma) y}
+    \prod \phi_i^2
+$$
+
+Now the inverse determiant simplifies to 
+
+$$
+|\Sigma^{-1}|^{-1} = |diag(\exp{(W\phi)})|^{-1}\\
+    = \prod(\exp{\frac{1}{W\phi}})^{-1} = \exp(-1\sum \frac{1}{W\phi})
+$$
+
+Finally
+
+$$
+(2\pi)^{\frac{k}{2}} \exp(-1\sum \frac{1}{W\phi}) \prod \phi_i^2
+    \exp{y^T (\Sigma^{-1} - \Sigma^TX(X^T\Sigma X)^{-1}X^T\Sigma) y}.
+$$
+
+Hmm, does this look like a Scaled inverse $\Khi^2$ ? Dunno. Kind of, since 
+we have something like $x^n exp(1/x)$.
+
