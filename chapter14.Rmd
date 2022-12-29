@@ -1,6 +1,7 @@
 ---
 title: "BDA: Chapter 14 exercices"
 author: "OS"
+output: html_document
 ---
 
 # Exercice 5
@@ -19,10 +20,10 @@ undefined.
 
 I cheated and this is essentially taken from the solutions page.
 
-So we have 
+So we have
 \begin{equation}
 p(\tilde{y}, \beta|\sigma, y) =
-    p(\tilde{y}|\beta, \sigma, y) p(\beta | \sigma, y)
+p(\tilde{y}|\beta, \sigma, y) p(\beta | \sigma, y)
 \end{equation}
 
 The first term is the prosterior predictive distribution, which has essentially
@@ -33,33 +34,33 @@ convinced that it is necessairy quadratic in $(\tilde{y}, \beta)$. (Although
 I realise that it is must be true.)
 
 I found it useful to first write what we're looking for. If $(\tilde{y}, \beta)$
-are jointly normal then they log density proportinal to 
+are jointly normal then they log density proportinal to
 
 \begin{equation}
-    \def\e1{\tilde{y} - X\beta}
-    \def\e2{\beta - \hat\beta}
-    \begin{pmatrix}
-        \e1\\
-        \e2
-    \end{pmatrix}^T
-    \begin{pmatrix}
-        I\sigma^2 & A^T\\
-        A         & V_\beta\sigma^2
-    \end{pmatrix}
-    \begin{pmatrix}
-        \e1\\
-        \e2
-    \end{pmatrix}\\
-    = \e1^TI\sigma^2\e2 + \e2^TA\1e + \e1^TA^T\e2 + \e2^T(V_\beta\sigma^2)\e2
+\def\e1{\tilde{y} - X\beta}
+\def\e2{\beta - \hat\beta}
+\begin{pmatrix}
+\e1\\
+\e2
+\end{pmatrix}^T
+\begin{pmatrix}
+I\sigma^2 & A^T\\
+A & V*\beta\sigma^2
+\end{pmatrix}
+\begin{pmatrix}
+\e1\\
+\e2
+\end{pmatrix}\\
+= \e1^TI\sigma^2\e2 + \e2^TA\1e + \e1^TA^T\e2 + \e2^T(V*\beta\sigma^2)\e2
 \end{equation}
 
 Now on the other side we get.
 
 \begin{align}
 p(\tilde{y}|\beta, \sigma, y)p(\beta | \sigma, y)
-    &= N(\tilde{y}|\hat{\beta} X, I\hat{\sigma}^2) N(\beta|\hat{\beta},V_\beta\hat\sigma^2)\\
-    &\propto exp(-\frac{1}{2}(\tidle{y} - \hat\beta X)^T(I\hat\sigma^2)^-1(\tidle{y} - \hat\beta X) +
-    (\tidle{y} - \beta X)^T(I\sigma^2)^-1(\tidle{y} - \beta X))
+&= N(\tilde{y}|\hat{\beta} X, I\hat{\sigma}^2) N(\beta|\hat{\beta},V\_\beta\hat\sigma^2)\\
+&\propto exp(-\frac{1}{2}(\tidle{y} - \hat\beta X)^T(I\hat\sigma^2)^-1(\tidle{y} - \hat\beta X) +
+(\tidle{y} - \beta X)^T(I\sigma^2)^-1(\tidle{y} - \beta X))
 \end{align}
 
 Now the first and the last tem coinside perfeclty with the previous statement.
@@ -72,23 +73,23 @@ kind of should have gussed.
 Let us take a look at a model defined with the following terms
 
 \begin{equation}
-y_* = \begin{pmatrix}
-    y\\
-    \beta_0
-    \end{pmatrix},\quad
-    X_* = \begin{pmatrix}
-    X\\
-    I_k
-    \end{pmatrix},\quad
-    \Sigma_* = \begin{pmatrix}
-    \Sigma_y & 0 \\
-    0        & \Sigma_\beta
-    \end{pmatrix}.
+y*\* = \begin{pmatrix}
+y\\
+\beta_0
+\end{pmatrix},\quad
+X*_ = \begin{pmatrix}
+X\\
+I*k
+\end{pmatrix},\quad
+\Sigma*_ = \begin{pmatrix}
+\Sigma*y & 0 \\
+0 & \Sigma*\beta
+\end{pmatrix}.
 \end{equation}
 
-The prior is unchanged, but the likelihood is now 
+The prior is unchanged, but the likelihood is now
 \begin{equation}
-N(y_*|X_*\beta, \Sigma_*)
+N(y*\*|X*_\beta, \Sigma\__)
 \end{equation}
 
 Now, insted of developping ths specific case might as well develop the general
@@ -108,11 +109,11 @@ part of the posterior within the exponatial is
 y^T (\Sigma^{-1} - \Sigma^TX(X^T\Sigma X)^{-1}X^T\Sigma) y
 \end{equation}
 
-The rest of the posterior is equal to 
+The rest of the posterior is equal to
 
 \begin{equation}
 (2\pi)^{\frac{k}{2}} |\Sigma^{-1}|^{-1}
-    \exp(\text{The expression above}) \prod \phi_i^2
+\exp(\text{The expression above}) \prod \phi_i^2
 \end{equation}
 
 Conditionally on $\phi$ and $y$, this a multivariate normal distribution with
@@ -122,12 +123,12 @@ matrix. Nice.
 Now what's left ?
 
 $$
-(2\pi)^{\frac{k}{2}} |\Sigma^{-1}|^{-1} 
+(2\pi)^{\frac{k}{2}} |\Sigma^{-1}|^{-1}
     \exp{y^T (\Sigma^{-1} - \Sigma^TX(X^T\Sigma X)^{-1}X^T\Sigma) y}
     \prod \phi_i^2
 $$
 
-Now the inverse determiant simplifies to 
+Now the inverse determiant simplifies to
 
 $$
 |\Sigma^{-1}|^{-1} = |diag(\exp{(W\phi)})|^{-1}\\
@@ -141,6 +142,366 @@ $$
     \exp{y^T (\Sigma^{-1} - \Sigma^TX(X^T\Sigma X)^{-1}X^T\Sigma) y}.
 $$
 
-Hmm, does this look like a Scaled inverse $\Khi^2$ ? Dunno. Kind of, since 
+Hmm, does this look like a Scaled inverse $\Chi^2$ ? Dunno. Kind of, since
 we have something like $x^n exp(1/x)$.
+
+Anyway, the initial question was to proove that adding pseudo-observatons
+is equivalent to setting a priror.
+
+To do that let us start with $\beta$. Overall the log posterior has this
+form :
+
+$$
+(\beta - \hat\beta)^T (X^T\Sigma_yX)^{-1} (\beta - \hat\beta) +
+    (\beta - \beta_0)^T \Sigma_\beta^{-1} (\beta - \beta_0).
+$$
+
+The first term is the non-infored posterior, the second is the prior on
+$\beta$ which is also normal.
+
+This is equal to
+
+$$
+(\beta - (\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1})^{-1}((X^T\Sigma_yX)^{-1}\hat\beta + \Sigma_\beta^{-1}\beta_0))
+(\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1})
+(\beta - (\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1})^{-1}((X^T\Sigma_yX)^{-1}\hat\beta + \Sigma_\beta^{-1}\beta_0))\\
+- ((X^T\Sigma_yX)^{-1}\hat\beta + \Sigma_\beta^{-1}\beta_0)^T(\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1})^{-1}((X^T\Sigma_yX)^{-1}\hat\beta + \Sigma_\beta^{-1}\beta_0)\\
++ \beta_0^T\Sigma_\beta^{-1}\beta_0 + \hat\beta(X^T\Sigma_yX)^{-1}\hat\beta.
+$$
+
+The important part is that this means that the posterior distribution
+is $N(\beta|(\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1})^{-1}((X^T\Sigma_yX)^{-1}\hat\beta + \Sigma_\beta^{-1}\beta_0),(\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1}))$
+Which loks reasonable, as the expected value is a weighted average of the
+ininformed estimator and the prior mean.
+
+However, i'm having trouble matching this to the previous expression,
+it is not evident that means and variance-covariances matricies match up :
+
+$$
+(\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1})^{-1}((X^T\Sigma_yX)^{-1}\hat\beta + \Sigma_\beta^{-1}\beta_0) = (X_*^T\Sigma_*X_*)^{-1}X_*^T\Sigma_*y_*),
+(\Sigma_\beta^{-1} + (X^T\Sigma_yX)^{-1}) = X_*^T\Sigma_*X_*
+$$
+
+# Exercice 9
+
+## a
+
+Posterior density of $\beta$ with non-informative prior is normal. We multipy
+that by the prior on $\beta$, that is, $\prod_j exp(-\lambda |\beta_j|)$.
+Note that this also equals to $exp(-\lambda \sum_j |beta_j|)$. We can thus
+only write the part of the posterior within the exponent.
+
+$$
+log(\beta|y, \sigma) \propto
+    (\beta - \hat\beta)^T (V_\beta\sigma^2)^{-1} (\beta - \hat\beta) +
+    -\lambda \sum_j |\beta_j|
+$$
+
+## b
+
+If we treat $\beta$ as one dimential, that is, a scalar the expression
+above simplifies to 
+
+$$
+log(\beta|y, \sigma) \propto
+    \frac{(\beta - \hat\beta)^2}{(v_\beta\sigma^2)^{-1}}
+    -\lambda |\beta|
+$$
+
+Finding the posterior mode is equivalent to finding the maximum of the above
+expression (because $\log$ is monotenous and increasing). To find the maximum
+we look for the roots of the derivative. The derivative exists everywhere
+except at $0$ where $|x|$ is not smooth.
+
+$$
+    2 v_\beta\sigma^2 (\beta - \hat\beta) = \lambda \text{sign}(\beta)\\
+    \beta - \hat\beta = \lambda \frac{\text{sign}(\beta)}{2 v_\beta\sigma^2}\\
+    \beta = \hat\beta + \lambda \frac{\text{sign}(\beta)}{2 v_\beta\sigma^2}\\
+$$
+
+This seems very close to the truth since it says that the Lasso estimator
+of $\beta$ is the usual (least squares) estimator plus some term depending on
+regularization parameter $\lambda$. Moreover for $\lambda = 0$ the second term
+disappears. However, I would have expeted the term to be pulling the estimate
+towards zero, and this is not the behavior we seem to observe. Perhaps I
+lost a sign somewhere.
+
+## c
+
+When can find the above derivative for the matrix version as well.
+
+$$
+\frac{\partial \log{\beta}}{\partial \beta} = 
+    2 (V_\beta\sigma^2)^{-1} (\beta - \hat\beta) +
+    -\lambda \text{Sign}(\beta_j)
+$$
+
+And the root is at :
+
+$$
+\beta =
+\hat\beta + \frac{\lambda}{2} (V_\beta\sigma^2)\text{Sign}(\beta_j).
+$$
+
+If we take the $i$th coefficent of $\beta$, we get
+
+$$
+\beta_i =
+    \hat\beta_i + \frac{\lambda}{2} (V_\beta\sigma^2)_{i, \dot} \text{Sign}(\beta_j).
+$$
+
+Therefore, $\beta_i$ is not necessairy pulled towards $0$ and the adjustement
+depends on it's correlation to other $\beta$s and on all of the signs.
+
+
+# Exercice 10
+
+This exercice call for using a dataset in "in an application
+area of interest to you, with many predictors". I use a dataset of
+automobile bodily injuries.
+
+```{r}
+library(tidyverse)
+library(insuranceData)
+library(rstan)
+data(AutoBi)
+AutoBi <- as_tibble(AutoBi) %>%
+    mutate(
+        CASENUM = NULL,
+        ATTORNEY = factor(ifelse(ATTORNEY == 1, "Yes", "No")),
+        CLMSEX = factor(ifelse(CLMSEX == 1, "Male", "Female")),
+        MARITAL = case_when(
+            MARITAL == 1 ~ "Married",
+            MARITAL == 2 ~ "Single",
+            MARITAL == 3 ~ "Widowed",
+            MARITAL == 4 ~ "Separated"
+        ),
+        MARITAL = as.factor(MARITAL),
+        CLMINSUR = case_when(
+            CLMINSUR == 1 ~ "Yes",
+            CLMINSUR == 2 ~ "No",
+            CLMINSUR == 3 ~ "Not applicable",
+        ),
+        CLMINSUR = as.factor(CLMINSUR),
+        SEATBELT = case_when(
+            SEATBELT == 1 ~ "Yes",
+            SEATBELT == 2 ~ "No",
+            SEATBELT == 3 ~ "Not applicable"
+        ),
+        SEATBELT = as.factor(SEATBELT),
+    )
+summary(AutoBi)
+```
+
+As a baseline let us estimate the usual linear model.
+
+```{r}
+formula <- log(LOSS) ~ ATTORNEY + CLMSEX + MARITAL + CLMINSUR + SEATBELT + CLMAGE
+auto_bi_lm <- lm(formula, data = AutoBi)
+summary(auto_bi_lm)
+```
+
+First, I noticed that the response variable is very asymetric, with a pretty
+long right tail. So I choose to model the log of the response.
+Also, buch of variables are not significant,
+
+## a
+
+First estimate Lasso problem
+
+```{r}
+library(glmnet)
+library(broom)
+
+mf_autobi <- model.frame(formula, AutoBi)
+auto_bi_glmnet <- cv.glmnet(
+    model.matrix(mf_autobi, AutoBi),
+    model.response(mf_autobi)
+)
+plot(auto_bi_glmnet)
+coef(auto_bi_glmnet, s = "lambda.min")
+min_lambda <- tidy(auto_bi_glmnet) %>%
+    filter(estimate == min(estimate)) %>%
+    pull(lambda)
+
+moda <- function(x, ...) {
+    d <- density(x, ...)
+    d$x[which.max(d$y)]
+}
+```
+
+Now, we repeat the same process but on bootstraped samples.
+
+```{r}
+boot_pars <- replicate(100, {
+    n <- nrow(AutoBi)
+    idx <- sample.int(n, size = n, replace = TRUE)
+    mf <- model.frame(formula, AutoBi[idx, ])
+    abg <- cv.glmnet(
+        model.matrix(mf, AutoBi[idx, ]),
+        model.response(mf)
+    )
+    min_lambda <- tidy(abg) %>%
+        filter(estimate == min(estimate)) %>%
+        pull(lambda)
+    c(
+        as.vector(coef(abg, s = "lambda.min")),
+        labda = min_lambda
+    )
+}) %>% t()
+```
+
+
+Now we can, visualize the distribution of the lambdas. 
+
+```{r}
+hist(boot_pars[, "labda"])
+```
+
+The mode of this distribution is `r moda(boot_pars[, "labda"])`.
+
+## c
+
+Now to estimate a fully Bayesian Lasso model.
+
+First, a small note. By accident, I fit a model that has a completely
+flat prior (not on $\sigma^{-2}$, just $\propto 1$). This resulted in a model
+that seemed to completely align with the usual least squares estimates.
+
+I had trouble wit the
+lambda parameter; I tried a flat prior, or some weekly informative one
+like $\lambda^{-2}$, or a half-cauchy. It didn't work. At best $\lambda$
+estimate was extremely variable with huge $\hat R$ and tiny effective sample
+sizes, at worst the same was true for all parameters. At the end of the day
+use the fact that effectively $\lambda$ has a limited range, under a certain
+value the model is the least squares estimate, above certain value only the
+intercept is kept. I cheat and look at `glmnet` lasso to get the range.
+
+```{r}
+lasso_lambda_stan <- "
+data {
+    int<lower=0> K;
+    int<lower=0> N;
+    vector[N] y;
+    matrix[N,K-1] x;
+}
+parameters {
+    real beta0;
+    vector[K-1] beta;
+    real<lower=0> sigma;
+    real llambda;
+}
+transformed parameters {
+    real<lower=0> lambda = exp(llambda);
+}
+model {
+    // Likelihood
+    target += normal_lpdf(y | beta0 + x*beta, sigma);
+    // Sigma prior
+    target += -2 * sigma;
+    // Beta prior
+    target += lambda * sum(fabs(beta));
+    // lambda prior
+    //target += cauchy_lpdf(lambda | 0, 0.00001);
+    llambda ~ uniform(-7, 0);
+}
+"
+fit2 <- stan(
+    model_code = lasso_lambda_stan,
+    data = list(
+        N = nrow(model.matrix(mf_autobi, AutoBi)),
+        K = ncol(model.matrix(mf_autobi, AutoBi)),
+        y = model.response(mf_autobi),
+        x = scale(model.matrix(mf_autobi, AutoBi)[, -1])
+    ),
+    chains = 4,
+    warmup = 5e3,
+    iter = 10e3,
+    cores = 1
+)
+```
+
+It is actually kind of tricky to calculate the mode from a sample. I'm going to
+just use the `density` estimation.
+
+```{r}
+simuls2 <- rstan::extract(fit2)
+c(
+    beta0 = moda(simuls2[["beta0"]]),
+    apply(simuls2[["beta"]], 2, moda),
+    sigma = moda(simuls2[["sigma"]]),
+    lambda = moda(simuls2[["lambda"]])
+)
+```
+
+## c.2
+
+I also fit a lasso model but with $\lambda$ parameter fixed to the value chosen
+by cross-validation.
+
+```{r}
+lasso_lm_stan <- "
+data {
+    int<lower=0> K;
+    int<lower=0> N;
+    vector[N] y;
+    matrix[N,K-1] x;
+    real<lower=0> lambda_min;
+}
+parameters {
+    real beta0;
+    vector[K-1] beta;
+    real<lower=0> sigma;
+}
+transformed parameters {
+    real<lower=0> lambda = lambda_min;
+}
+model {
+    // Likelihood
+    target += normal_lpdf(y | beta0 + x*beta, sigma);
+    // Sigma prior
+    target += -2 * sigma;
+    // Beta prior
+    target += lambda * sum(fabs(beta));
+}
+"
+fit1 <- stan(
+    model_code = lasso_lm_stan,
+    data = list(
+        N = nrow(model.matrix(mf_autobi, AutoBi)),
+        K = ncol(model.matrix(mf_autobi, AutoBi)),
+        y = model.response(mf_autobi),
+        x = scale(model.matrix(mf_autobi, AutoBi)[, -1]),
+        lambda_min = min_lambda
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+```
+
+## d
+
+Now time to compare the results.
+
+```{r}
+simuls1 <- rstan::extract(fit1)
+rbind(
+    bootstrap = apply(boot_pars, 2, moda)[-1],
+    fixed_lambda = c(
+        beta0 = moda(simuls1[["beta0"]]),
+        apply(simuls1[["beta"]], 2, moda),
+        lambda = moda(simuls1[["lambda"]])
+    ),
+    full_bayes = c(
+        beta0 = moda(simuls2[["beta0"]]),
+        apply(simuls2[["beta"]], 2, moda),
+        lambda = moda(simuls2[["lambda"]])
+    )
+)
+```
+
+
+On to the task
 
