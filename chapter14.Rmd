@@ -315,7 +315,7 @@ library(broom)
 
 mf_autobi <- model.frame(formula, AutoBi)
 auto_bi_glmnet <- cv.glmnet(
-    model.matrix(mf_autobi, AutoBi),
+    model.matrix(mf_autobi, AutoBi)[, -1],
     model.response(mf_autobi)
 )
 plot(auto_bi_glmnet)
@@ -338,7 +338,7 @@ boot_pars <- replicate(100, {
     idx <- sample.int(n, size = n, replace = TRUE)
     mf <- model.frame(formula, AutoBi[idx, ])
     abg <- cv.glmnet(
-        model.matrix(mf, AutoBi[idx, ]),
+        model.matrix(mf, AutoBi[idx, ])[, -1],
         model.response(mf)
     )
     min_lambda <- tidy(abg) %>%
@@ -346,7 +346,8 @@ boot_pars <- replicate(100, {
         pull(lambda)
     c(
         as.vector(coef(abg, s = "lambda.min")),
-        labda = min_lambda
+        sigma = NA,
+        lambda = min_lambda
     )
 }) %>% t()
 ```
@@ -355,10 +356,10 @@ boot_pars <- replicate(100, {
 Now we can, visualize the distribution of the lambdas. 
 
 ```{r}
-hist(boot_pars[, "labda"])
+hist(boot_pars[, "lambda"])
 ```
 
-The mode of this distribution is `r moda(boot_pars[, "labda"])`.
+The mode of this distribution is `r moda(boot_pars[, "lambda"])`.
 
 ## c
 
@@ -368,14 +369,14 @@ First, a small note. By accident, I fit a model that has a completely
 flat prior (not on $\sigma^{-2}$, just $\propto 1$). This resulted in a model
 that seemed to completely align with the usual least squares estimates.
 
-I had trouble wit the
-lambda parameter; I tried a flat prior, or some weekly informative one
-like $\lambda^{-2}$, or a half-cauchy. It didn't work. At best $\lambda$
-estimate was extremely variable with huge $\hat R$ and tiny effective sample
-sizes, at worst the same was true for all parameters. At the end of the day
-use the fact that effectively $\lambda$ has a limited range, under a certain
-value the model is the least squares estimate, above certain value only the
-intercept is kept. I cheat and look at `glmnet` lasso to get the range.
+I had trouble with the $\lambda$ parameter; I tried a flat prior, or some
+weekly informative one like $\lambda^{-2}$, or a half-cauchy. It didn't work.
+At best $\lambda$ estimate was extremely variable with huge $\hat R$ and tiny
+effective sample sizes, at worst the same was true for all parameters. At the
+end of the day I use the fact that effectively $\lambda$ has a limited range,
+under a certain value the model is the least squares estimate, above certain
+value only the intercept is kept. I cheat and look at `glmnet` lasso to get the
+range.
 
 ```{r}
 lasso_lambda_stan <- "
@@ -402,7 +403,6 @@ model {
     // Beta prior
     target += lambda * sum(fabs(beta));
     // lambda prior
-    //target += cauchy_lpdf(lambda | 0, 0.00001);
     llambda ~ uniform(-7, 0);
 }
 "
@@ -487,21 +487,308 @@ Now time to compare the results.
 
 ```{r}
 simuls1 <- rstan::extract(fit1)
-rbind(
-    bootstrap = apply(boot_pars, 2, moda)[-1],
+compar_coefs <- rbind(
+    bootstrap = apply(boot_pars, 2, function(x) if (any(is.na(x))) NA else moda(x)),
     fixed_lambda = c(
         beta0 = moda(simuls1[["beta0"]]),
         apply(simuls1[["beta"]], 2, moda),
+        sigma = moda(simuls1[["sigma"]]),
         lambda = moda(simuls1[["lambda"]])
     ),
     full_bayes = c(
         beta0 = moda(simuls2[["beta0"]]),
         apply(simuls2[["beta"]], 2, moda),
+        sigma = moda(simuls2[["sigma"]]),
         lambda = moda(simuls2[["lambda"]])
     )
-)
+) %>% t()
+ncoef <- length(coef(auto_bi_glmnet, s = "lambda.min"))
+coef_names <- rownames(coef(auto_bi_glmnet, s = "lambda.min"))
+rownames(compar_coefs)[seq_len(ncoef)] <- coef_names
+compar_coefs
+```
+
+Most of the coefficients are similar. The noticable differences are between
+bootstraped and Bayesian estimations. The largest seems to be for the lambda
+coefficient which is rather different for the full bayesian approach.
+
+```{r}
+ggplot() +
+    aes() +
+    geom_histogram(aes(x = boot_pars[, "lambda"]), color = "red", alpha = 0.5) +
+    geom_histogram(aes(x = simuls2[["lambda"]]), )
+
+compar_coefs <- rbind(
+    bootstrap = apply(boot_pars, 2, function(x) if (any(is.na(x))) NA else moda(x)),
+    fixed_lambda = c(
+        beta0 = moda(simuls1[["beta0"]]),
+        apply(simuls1[["beta"]], 2, moda),
+        sigma = moda(simuls1[["sigma"]]),
+        lambda = moda(simuls1[["lambda"]])
+    ),
+    full_bayes = c(
+        beta0 = moda(simuls2[["beta0"]]),
+        apply(simuls2[["beta"]], 2, moda),
+        sigma = moda(simuls2[["sigma"]]),
+        lambda = moda(simuls2[["lambda"]])
+    )
+) %>% t()
 ```
 
 
 On to the task
+
+# Exercice 11
+
+First, let's write down the likelihood with $u_i$. We can take a fixed $i$ since
+the whole likelihood of $(x, y)$ is just the product of likelihoods of
+$(x_i, y_i)$.
+
+\begin{equation}
+p(x_i, y_i|a, b) = p(x_i, y_i|u_i, v_i) p(v_i|u_i,a,b) p(u_i)
+\end{equation}
+
+The proper way to find this is by writing the density of all the quantities,
+conditional on $(a,b)$.
+
+\begin{align}
+p(x_i, y_i, u_i, v_i | a,b) &= p(x_i, y_i | u_i, v_i, a, b) p(u_i, v_i | a,b) \\
+    &= p(x_i, y_i | u_i, v_i) p(v_i | u_i, a,b) p( u_i | a,b) \\
+    &= p(x_i, y_i | u_i, v_i) p(v_i | u_i, a,b) p(u_i)
+\end{align}
+
+I failed to find an easy way to integrate this. Instead I suggest viewing
+the $(u_i, v_i)$ as a multivariate normal with $(\mu, a + b\mu)$ mean vector,
+and $\begin{pmatrix}\tau^2 & b\tau\\b\tau&b^2\tau^2\end{pmatrix}$.
+
+This would mean that the likelihood can be re-written as product of two normals.
+Now, I didn't bother checking (read : couldn't proove it on my own but didn't
+want to look it up ether), but I think that a multivarate normal with 
+multivaraite normal mean is also multivaraite normal with variance matrix
+that is the sum of the two. In our case this means that we can simply write
+
+$$
+p(x_i, y_i | a, b) =
+N((\mu, a + b\mu), \Sigma + \begin{pmatrix}\tau^2 & b\tau\\b\tau&b^2\tau^2\end{pmatrix}).
+$$
+
+## b 
+
+The likelihood looks rather like a normal model, but $(a,b)$ are not the mean
+parameter. Also, both values can take positive or negative values. So my first
+idea is to just use a flat prior, $\propto 1$. Another way to go would be to use
+a distribution with large variance, such as the Student distribution, or Cauchy.
+
+# Exercice 12
+
+## a
+
+```{r}
+dogs <- tibble(
+    mass = c(31.2, 24.0, 19.8, 18.2, 9.6, 6.5, 3.2),
+    surface = c(10750, 8805, 7500, 7662, 5286, 3724, 2423),
+    metabolism = c(1113, 982, 908, 842, 626, 430, 281),
+)
+
+slf_stan <- c("
+data {
+    int<lower=0> N;
+    vector[N] lmass;
+    vector[N] lmetabolism;
+}
+transformed data {
+    matrix[N, 2] y;
+    y[,1] = lmass;
+    y[,2] = lmetabolism;
+}
+parameters {
+    real mu;
+    real a;
+    real b;
+    real<lower=0> sigma;
+    real<lower=0> tau;
+}
+transformed parameters {
+    vector[2] Mu;
+    Mu[1] = mu;
+    Mu[2] = a*mu + b;
+
+    matrix[2,2] Sigma;
+    Sigma[1,1] = sigma^2;
+    Sigma[2,2] = sigma^2;
+    Sigma[1,2] = 0;
+    Sigma[2,1] = 0;
+
+    matrix[2,2] Tau;
+    Tau[1,1] = tau^2;
+    Tau[1,2] = a * tau^2;
+    Tau[2,1] = a * tau^2;
+    Tau[2,2] = a^2 * tau^2;
+}
+model {
+    for (i in 1:N) {
+        y[i, ] ~ multi_normal(Mu, Sigma + Tau);
+    }
+}
+generated quantities {
+    vector[2] y_post;
+    y_post = multi_normal_rng(Mu, Sigma + Tau);
+}
+")
+
+
+sl_fit <- stan(
+    model_code = slf_stan,
+    data = list(
+        N = nrow(dogs),
+        lmass = log(dogs$mass),
+        lmetabolism = log(dogs$metabolism)
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 4
+)
+simuls_sl <- rstan::extract(sl_fit)
+sl_fit
+
+ggplot() +
+    aes(x = simuls_sl$mu) +
+    geom_histogram(binwidth = 0.01)
+
+ggplot() +
+    aes(x = simuls_sl$sigma) +
+    geom_histogram(binwidth = 0.001)
+
+ggplot() +
+    aes(x = simuls_sl$tau) +
+    geom_histogram(binwidth = 0.005)
+
+ggplot() +
+    aes(x = log(dogs$mass), y = log(dogs$metabolism)) +
+    geom_point() +
+    geom_abline(slope = median(simuls_sl$a), intercept = median(simuls_sl$b))
+```
+
+## b
+
+A linear relationship on log scale, on the original scale becomes :
+
+$$
+y = e^b x^a
+$$
+
+We can compare the estimated trend line with observed data.
+
+```{R}
+dogs %>%
+    ggplot() +
+    aes(x = mass, y = metabolism) +
+    geom_point() +
+    stat_function(fun = function(x) exp(median(simuls_sl$b)) * x^median(simuls_sl$a))
+```
+
+Then we can construct a confidence interval for the trajectory.
+
+```{r}
+ci_traj <- tibble(
+    x = seq(min(dogs$mass), max(dogs$mass), length.out = 100),
+    map_dfr(
+        x,
+        function(x) {
+            y <- exp(simuls_sl$b) * x^simuls_sl$a
+            quantile(y, c(0.025, 0.25, 0.5, 0.75, 0.975))
+        }
+    )
+)
+
+ci_traj %>%
+    select(-c(down, up)) %>%
+    pivot_longer(
+        cols = -x,
+        names_to = "quantile",
+        values_to = "value"
+    ) %>%
+    ggplot() +
+    aes(
+        x = x,
+        y = value,
+        color = quantile,
+        group = quantile
+    ) +
+    geom_line() +
+    geom_point(
+        aes(x = mass, y = metabolism, color = NULL, group = NULL),
+        data = dogs
+    )
+```
+
+To get a predictive confidence interval we simulate datapoints from the
+posterior predictive distribution.
+
+```{r}
+ggplot() +
+    geom_point(
+        aes(x = exp(simuls_sl$y_post[, 1]), y = exp(simuls_sl$y_post[, 2])),
+    )
+```
+
+Note the very large values that are generated. Indeed a mass of 10e3 kg
+seems execive for a dog. This is the concequence of essentially modeling the
+mass as a log-normal distribution giving way for some potentially very high
+values.
+
+We can still take a look at the relationship for more credible values.
+
+```{r}
+ggplot() +
+    geom_point(
+        aes(x = exp(simuls_sl$y_post[, 1]), y = exp(simuls_sl$y_post[, 2])),
+    ) +
+    coord_cartesian(
+        xlim = c(0, max(dogs$mass)), ylim = c(0, max(dogs$metabolism))
+    )
+```
+
+We can construct a predictive confidence interval.
+
+```{r}
+ci_traj2 <- tibble(
+    x = seq(0, max(dogs$mass), length.out = 100),
+    map_dfr(
+        x,
+        function(x) {
+            eps <- 0.1
+            window <- which(
+                x * exp(-eps) < exp(simuls_sl$y_post[, 1]) &
+                    exp(simuls_sl$y_post[, 1]) <= x * exp(eps)
+            )
+            quantile(exp(simuls_sl$y_post[window, 2]), c(0.025, 0.5, 0.975))
+        }
+    )
+)
+
+ci_traj2 %>%
+    ggplot() +
+    aes(
+        x = x,
+        y = `50%`,
+        ymin = `2.5%`,
+        ymax = `97.5%`,
+    ) +
+    geom_line() +
+    geom_ribbon(alpha = 0.05) +
+    geom_point(
+        aes(x = mass, y = metabolism, ymin = NULL, ymax = NULL),
+        data = dogs
+    )
+```
+
+Overall it appears that the model captures the relationship between mass and
+metabolism reasonably well. Although the distribution of the mass, and
+metabolism respectively does not seem be particularly well represented as seen
+from the unrealisticly large values. 
+
+# c
+
 
