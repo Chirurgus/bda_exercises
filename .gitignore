@@ -4,6 +4,11 @@ data
 .Rhistory
 .Rapp.history
 
+# Generated files
+*.tex
+*.log
+*.html
+
 # Session Data files
 .RData
 
