@@ -4,6 +4,10 @@ author: "OS"
 output: html_document
 ---
 
+```{r, include = FALSE}
+source("R/setup.R")
+```
+
 # Exercice 5
 
 Can't have a pertinent discussion until having thougroly read chapter 8.
