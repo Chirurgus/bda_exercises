@@ -265,9 +265,6 @@ area of interest to you, with many predictors". I use a dataset of
 automobile bodily injuries.
 
 ```{r}
-library(tidyverse)
-library(insuranceData)
-library(rstan)
 data(AutoBi)
 AutoBi <- as_tibble(AutoBi) %>%
     mutate(
@@ -314,8 +311,6 @@ Also, buch of variables are not significant,
 First estimate Lasso problem
 
 ```{r}
-library(glmnet)
-library(broom)
 
 mf_autobi <- model.frame(formula, AutoBi)
 auto_bi_glmnet <- cv.glmnet(
@@ -707,7 +702,6 @@ ci_traj <- tibble(
 )
 
 ci_traj %>%
-    select(-c(down, up)) %>%
     pivot_longer(
         cols = -x,
         names_to = "quantile",
@@ -795,4 +789,95 @@ from the unrealisticly large values.
 
 # c
 
+What happens if we set the variance ratio to 2 for $b$? 
 
+Well, I'm not quite sur how to fix the varience rato :o
+
+```{r}
+slf2_stan <- c("
+data {
+    int<lower=0> N;
+    vector[N] lmass;
+    vector[N] lmetabolism;
+}
+transformed data {
+    matrix[N, 2] y;
+    y[,1] = lmass;
+    y[,2] = lmetabolism;
+}
+parameters {
+    real mu;
+    real a;
+    real b;
+    real<lower=0> sigma;
+    real<lower=0> tau;
+}
+transformed parameters {
+    vector[2] Mu;
+    Mu[1] = mu;
+    Mu[2] = a*mu + b;
+
+    matrix[2,2] Sigma;
+    Sigma[1,1] = sigma^2;
+    Sigma[2,2] = sigma^2;
+    Sigma[1,2] = 0;
+    Sigma[2,1] = 0;
+
+    matrix[2,2] Tau;
+    Tau[1,1] = tau^2;
+    Tau[1,2] = a * tau^2;
+    Tau[2,1] = a * tau^2;
+    Tau[2,2] = a^2 * tau^2;
+}
+model {
+    b ~ normal(10, 20);
+    for (i in 1:N) {
+        y[i, ] ~ multi_normal(Mu, Sigma + Tau);
+    }
+}
+generated quantities {
+    vector[2] y_post;
+    y_post = multi_normal_rng(Mu, Sigma + Tau);
+}
+")
+
+
+sl2_fit <- stan(
+    model_code = slf2_stan,
+    data = list(
+        N = nrow(dogs),
+        lmass = log(dogs$mass),
+        lmetabolism = log(dogs$metabolism)
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 4
+)
+simuls_sl <- rstan::extract(sl2_fit)
+sl2_fit
+```
+
+
+# Exercice 13
+
+So, the idea is to extend the previous model to three variables, and essentially
+assume that $y = b_0 + b_1 x_1 + b_2 x_2$. To put it into the form of the above
+model, assuming x_1 and x^2 are independent, would be to say that 
+
+$$
+p(y, x_1, x_2 | b_0, b_1, b_2) =
+N(
+    \begin{pmatrix}
+        b_0 + b_1\mu_1 + b_2\mu_2\\
+        \mu_1\\
+        \mu_2
+    \end{pmatrix},
+    \Sigma +
+        \begin{pmatrix}
+            b_1^2\tau_1^2 b_2^2\tau_2^2 & b_1\tau_1^2 & b_2\tau_2^2\\
+            b_1\tau_1^2                 & \tau_1^2    & 0\\
+            b_2\tau_2^2                 & 0           & \tau_2^2
+        \end{pmatrix}
+).
+$$
