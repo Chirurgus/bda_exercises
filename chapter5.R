@@ -15,9 +15,9 @@ sat_prep <- tribble(
     ~school, ~y, ~sd,
     "A",     28, 15,
     "B",     8,  10,
-    "C",     −3, 16,
+    "C",     -3, 16,
     "D",     7,  11,
-    "E",     −1, 9,
+    "E",     -1, 9,
     "F",     1,  11,
     "G",     18, 10,
     "H",     12, 18
@@ -44,7 +44,7 @@ mu_var <- sapply(
     tau,
     function(x) {
         st <- 1 / (sat_prep$sd^2 + x^2)
-        1/sum(st)
+        1 / sum(st)
     }
 )
 
@@ -52,9 +52,9 @@ mu <- rnorm(1000, mu_mean, sqrt(mu_var))
 
 theta <- mapply(
     function(m, t) {
-        mu_theta <- ((1/sat_prep$sd^2) * m + (1/tau^2) * mu) /
-            ((1/sat_prep$sd^2) + (1/tau^2))
-        var_theta <- 1 / ((1/sat_prep$sd^2) + (1/tau^2))
+        mu_theta <- ((1 / sat_prep$sd^2) * m + (1 / tau^2) * mu) /
+            ((1 / sat_prep$sd^2) + (1 / tau^2))
+        var_theta <- 1 / ((1 / sat_prep$sd^2) + (1 / tau^2))
         rnorm(1000, mu_theta, sqrt(var_theta))
     },
     sat_prep$y,
@@ -69,7 +69,7 @@ fct_count(sat_prep$school[best], prop = TRUE)
 better <- outer(
     1:8, 1:8,
     Vectorize(function(i, j) {
-        mean(theta[,i] > theta[,j])
+        mean(theta[, i] > theta[, j])
     })
 )
 
@@ -110,7 +110,7 @@ prior2 <- function(x) {
     d3 <- dnorm(x, mean = 2, sd = 3) /
         pnorm(0, mean = 2, sd = 3, lower.tail = FALSE)
     d3 <- ifelse(x >= 0, d3, 0)
-    6/8 * d1 + 1/8 * d2 + 1/8 * d3
+    6 / 8 * d1 + 1 / 8 * d2 + 1 / 8 * d3
 }
 plot(prior2, xlim = c(0, 100))
 
@@ -130,7 +130,7 @@ prior <- function(x) {
 }
 
 y_mean <- -.25
-y_sd <- sqrt(1/10)
+y_sd <- sqrt(1 / 10)
 
 posterior_numeric_nonorm <- function(x) {
     dnorm(y_mean, x, y_sd) * prior(x)
@@ -140,45 +140,45 @@ posterior_numeric <- function(x) {
     posterior_numeric_nonorm(x) / py$value
 }
 
-plot(prior, xlim= c(-5, 5))
-plot(posterior_numeric, xlim= c(-5, 5), add=TRUE, col="red")
+plot(prior, xlim = c(-5, 5))
+plot(posterior_numeric, xlim = c(-5, 5), add = TRUE, col = "red")
 abline(v = 0)
 
 posterior_calc_nonorm <- function(x) {
-    m1 <- (-1/.5^2 * y_mean/y_sd^2) / (1/.5^2 + 1/y_sd^2)
-    m2 <- (1/.5^2 * y_mean/y_sd^2) / (1/.5^2 + 1/y_sd^2)
-    s <- 1/( 1/.5^2 + 1/y_sd^2)
-    l/dnorm(y_mean, -1, s) * dnorm(x, m1, s) +
-        (1-l)/dnorm(y_mean, 1, s) * dnorm(x, m2, s)
+    m1 <- (-1 / .5^2 * y_mean / y_sd^2) / (1 / .5^2 + 1 / y_sd^2)
+    m2 <- (1 / .5^2 * y_mean / y_sd^2) / (1 / .5^2 + 1 / y_sd^2)
+    s <- 1 / (1 / .5^2 + 1 / y_sd^2)
+    l / dnorm(y_mean, -1, s) * dnorm(x, m1, s) +
+        (1 - l) / dnorm(y_mean, 1, s) * dnorm(x, m2, s)
 }
 const <- integrate(posterior_calc_nonorm, lower = -10, upper = 10)
 posterior_calc <- function(x) {
     posterior_calc_nonorm(x) / const$value
 }
 
-plot(prior, xlim= c(-5, 5))
-plot(posterior_calc, xlim= c(-5, 5),col="blue")
+plot(prior, xlim = c(-5, 5))
+plot(posterior_calc, xlim = c(-5, 5), col = "blue")
 abline(v = 0)
 
 data <- tribble(
-    ~street,       ~bike_route, ~bicycle, ~other,
-    "residential", TRUE,        16,        58,
-    "residential", TRUE,        9,         90,
-    "residential", TRUE,        10,        48,
-    "residential", TRUE,        13,        57,
-    "residential", TRUE,        19,        103,
-    "residential", TRUE,        20,        57,
-    "residential", TRUE,        18,        86,
-    "residential", TRUE,        17,        112,
-    "residential", TRUE,        35,        273,
-    "residential", TRUE,        55,        64,
+    ~street, ~bike_route, ~bicycle, ~other,
+    "residential", TRUE, 16, 58,
+    "residential", TRUE, 9, 90,
+    "residential", TRUE, 10, 48,
+    "residential", TRUE, 13, 57,
+    "residential", TRUE, 19, 103,
+    "residential", TRUE, 20, 57,
+    "residential", TRUE, 18, 86,
+    "residential", TRUE, 17, 112,
+    "residential", TRUE, 35, 273,
+    "residential", TRUE, 55, 64,
 )
 
 prior_ab <- function(a, b, log = FALSE) {
     if (log) {
-        (-5/2) * log(a + b)
+        (-5 / 2) * log(a + b)
     } else {
-        (a + b) ^ (-5/2)
+        (a + b)^(-5 / 2)
     }
     # da <- dexp(a, rate = 1/0.001, log)
     # db <- dexp(b, rate = 1/0.001, log)
@@ -208,8 +208,8 @@ hyper_posterior <- function(a, b) {
     lg <- lgamma(a + b) - lgamma(a) - lgamma(b) +
         lgamma(a + data$bicycle) + lgamma(b + data$other) +
         (-1) * lgamma(a + b + data$other + data$bicycle)
-    p <- prior_ab(a, b, log = TRUE) + sum(lg) 
-    exp(p - log(4.802023e-232)/1.2)
+    p <- prior_ab(a, b, log = TRUE) + sum(lg)
+    exp(p - log(4.802023e-232) / 1.2)
 }
 hyper_posterior <- Vectorize(hyper_posterior)
 
@@ -235,20 +235,20 @@ integrate(
 expand_grid(
     x = seq(-10, 4, length.out = 100),
     y = seq(-2, 2, length.out = 100)
-) %>% 
+) %>%
     mutate(
-        a = exp(x+ y)/(exp(y)+1),
-        b = exp(x)/(exp(y) + 1),
+        a = exp(x + y) / (exp(y) + 1),
+        b = exp(x) / (exp(y) + 1),
         d = hyper_posterior(a, b)
     ) %>%
-    ggplot(aes(x=x, y=y, z = d)) +
+    ggplot(aes(x = x, y = y, z = d)) +
     geom_contour_filled()
 
 
 expand_grid(
     a = seq(0, 10, length.out = 100),
     b = seq(0, 25, length.out = 100)
-) %>% 
+) %>%
     mutate(
         d = hyper_posterior(a, b)
     ) %>%
@@ -256,15 +256,17 @@ expand_grid(
     geom_contour_filled()
 
 
-sample_from_post <- function(n, post, d = 1, lower, upper, ntry = max(10, round(n*10, -2))) {
-    x_accepted <- array(NA, dim=c(0, d))
+sample_from_post <- function(n, post, d = 1, lower, upper, ntry = max(10, round(n * 10, -2))) {
+    x_accepted <- array(NA, dim = c(0, d))
     while (nrow(x_accepted) < n) {
         x <- array(runif(ntry * d, min = lower, max = upper), dim = c(ntry, d))
         y_dens <- do.call(
             post,
-            lapply(apply(x, 2, list), function(x) { x[[1]] })
+            lapply(apply(x, 2, list), function(x) {
+                x[[1]]
+            })
         )
-        y_dens <- y_dens/max(y_dens)
+        y_dens <- y_dens / max(y_dens)
         accepted <- which(runif(nrow(x)) <= y_dens)
         x_accepted <- rbind(x_accepted, x[accepted, ])
         message(sprintf("Accepted %i samples, %i overall.\n", length(accepted), nrow(x_accepted)))
@@ -275,7 +277,9 @@ sample_from_post <- function(n, post, d = 1, lower, upper, ntry = max(10, round(
 x <- sample_from_post(1000, hyper_posterior, d = 2, lower = c(0, 0), upper = c(100, 100))
 theta <- apply(
     x, 1,
-    function(hyp) { rbeta(10, hyp[1] + data$bicycle, hyp[2] + data$other) }
+    function(hyp) {
+        rbeta(10, hyp[1] + data$bicycle, hyp[2] + data$other)
+    }
 )
 theta <- t(theta)
 
@@ -284,9 +288,11 @@ theta <- t(theta)
 apply(x, 2, summary)
 apply(theta, 2, summary)
 apply(theta2, 2, summary)
-hist(theta[,1])
-hist(x[,2])
-plot(function(y) { dbeta(y, shape1 = mean(x[,1]), shape2 = mean(x[,2])) })
+hist(theta[, 1])
+hist(x[, 2])
+plot(function(y) {
+    dbeta(y, shape1 = mean(x[, 1]), shape2 = mean(x[, 2]))
+})
 
 sum(data$bicycle) / sum(data$bicycle + data$other)
 data %>%
@@ -295,11 +301,11 @@ data %>%
         empi = bicycle / (other + bicycle)
     )
 
-prop_bicycles <- rbeta(nrow(x), x[,1], x[,2])
+prop_bicycles <- rbeta(nrow(x), x[, 1], x[, 2])
 num_bycicles <- rbinom(nrow(x), size = 100, prob = prop_bicycles)
 summary(num_bycicles)
-quantile(num_bycicles, c(0, 1) + c(1, -1) * 0.05/2)
-quantile(prop_bicycles, c(0, 1) + c(1, -1) * 0.05/2)
+quantile(num_bycicles, c(0, 1) + c(1, -1) * 0.05 / 2)
+quantile(prop_bicycles, c(0, 1) + c(1, -1) * 0.05 / 2)
 
 # Exercice 14
 
@@ -327,7 +333,7 @@ hyper_posterior <- Vectorize(function(a, b) {
 expand_grid(
     a = seq(0, 20, length.out = 100),
     b = seq(0, 0.25, length.out = 100)
-) %>% 
+) %>%
     mutate(
         d = hyper_posterior(a, b)
     ) %>%
