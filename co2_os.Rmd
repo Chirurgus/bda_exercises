@@ -1,0 +1,116 @@
+---
+title: "Concentration de CO2 dans l'atmosphère depuis 1958"
+author: "OS"
+date: "12 mai 2023"
+output: pdf_document
+---
+
+L'objectif :
+
+> Votre mission si vous l'acceptez :
+> 1. Réalisez un graphique qui vous montrera une oscillation périodique superposée à une évolution systématique plus lente.
+> 2. Séparez ces deux phénomènes. Caractérisez l'oscillation périodique. Proposez un modèle simple de la contribution lente, estimez ses paramètres et tentez une extrapolation jusqu'à 2025 (dans le but de pouvoir valider le modèle par des observations futures).
+> 3. Déposer dans FUN votre résultat
+
+# Import données
+
+Les données utilisées sont collectées par C. Keeling. À ma connaissance ce sont ces
+données qui ont permis de détecter la tendance à la hausse du niveau du CO2 dans
+l'atmosphère. Cette tâche est assez difficile, car le niveau de CO2 est très
+variable en fonction de l'endroit où l'on capte. Il a fallu ainsi un jeu
+de données propre mesuré dans des conditions identiques.
+
+J'ai pu récupérer les données sur le site [web](https://scrippsco2.ucsd.edu/data/atmospheric_co2/primary_mlo_co2_record.html).
+Les données sont sous un format CSV, cependant elles comportent une
+grosse en-tête avec 57 liges de la documentation. Les noms des colonnes sont
+étalés sur plusieurs linges. Ainsi, il est le plus simple de simplement
+renseigner les noms de colonnes à la main.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+co2_file <- "monthly_in_situ_co2_mlo.csv"
+co2 <- read_csv(
+  co2_file,
+  skip = 60,
+  col_names = c(
+    "Yr", "Mn", "Date...3", "Date...4", "CO2...5", "seasonally...6", 
+    "fit", "seasonally...8", "CO2...9", "seasonally...10", "Sta")
+)
+```
+
+En plus des données brutes
+les diverses valeurs ajustées sont inclus (par exemple valeurs lises).
+Je m'intéresse uniquement à la série brute, qui est donnée à la fréquence
+mensuelle, au 15 du mois. Les valeurs manquantes sont indiqués par "-100".
+
+```{r}
+co2 <- co2 %>%
+  select(yr = Yr, mn = Mn, co2 = CO2...5) %>%
+  mutate(
+    date = ym(paste0(yr, mn)) + days(14),
+    co2 = replace(co2, co2 < 0, NA)
+  )
+```
+
+# Visualisation
+
+La tendance ainsi que le caractère périodique de la série sont assez évidents.
+
+```{r}
+co2 %>%
+  ggplot() +
+  aes(x = date, y = co2) +
+  geom_line()
+```
+
+On peut néanmoins zoomer pour se donner une idée de la période de la série.
+
+```{r}
+co2 %>%
+  ggplot() +
+  aes(x = date, y = co2) +
+  geom_line() +
+  geom_point() +
+  coord_cartesian(xlim = c(ymd("1980-01-01"), ymd("1990-01-01")), ylim = c(330, 360))
+```
+
+Il apparait que la période est 12 mois, une année.
+
+# Analyse
+
+Pour analyser ce phénomène, je propose une régression linéaire, avec deux effets :
+
+1. Tendance linéaire dans le temps ;
+2. effet de saisonnalité.
+
+```{r}
+m1 <- lm(co2 ~ date + factor(month(date)), data = co2)
+summary(m1)
+```
+
+Rien qu'avec ça on obtient un excellent fit.
+
+```{r}
+co2 %>%
+  mutate(prediction = predict(m1, .)) %>%
+  ggplot() +
+  aes(x = date, y = co2) +
+  geom_line() +
+  geom_line(aes(y = prediction), color = "blue")
+```
+
+Le graphique met en évidence que la vraie tendance n'est pas tout à fait
+linéaire. Je propose de l'ajuster avec un terme quadratique.
+
+```{r}
+m2 <- lm(co2 ~ poly(date, 2) + factor(month(date)), data = co2)
+summary(m2)
+
+co2 %>%
+  mutate(prediction = predict(m2, .)) %>%
+  ggplot() +
+  aes(x = date, y = co2) +
+  geom_line() +
+  geom_line(aes(y = prediction), color = "blue")
+```

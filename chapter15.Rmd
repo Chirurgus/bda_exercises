@@ -1,0 +1,992 @@
+---
+title: "BDA: Chapter 15 exercices"
+author: "OS"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(rstan)
+library(lme4)
+library(rstanarm)
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# Exercice 15.1
+
+## Normal model, now with `stan`
+
+```{r, eval = TRUE}
+# y is the average effect of training
+# sd_err is the standard error of the average effect
+sat_prep <- tribble(
+    ~school, ~y, ~sd_err,
+    "A", 28, 15,
+    "B", 8, 10,
+    "C", -3, 16,
+    "D", 7, 11,
+    "E", -1, 9,
+    "F", 1, 11,
+    "G", 18, 10,
+    "H", 12, 18
+)
+```
+
+First lets fit a hierarchial model to this data. 
+
+```{r}
+school_normal_model <- c("
+data {
+    int<lower=0> N;
+    vector[N] scores_mean;
+    vector[N] scores_sd;
+}
+parameters {
+    vector[N] mu;
+    real theta;
+    real<lower=0> tau;
+}
+transformed parameters {
+}
+model {
+    for (i in 1:N) {
+        scores_mean[i] ~ normal(mu[i], scores_sd[i]);
+        mu[i] ~ normal(theta, tau);
+    }
+}")
+
+school_normal_fit <- stan(
+    model_code = school_normal_model,
+    data = list(
+        N = nrow(sat_prep),
+        scores_mean = sat_prep$y,
+        scores_sd = sat_prep$sd_err
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+school_normal_fit
+snf_fit <- rstan::extract(school_normal_fit)
+```
+
+To check the results we plot the expected value of parametrs as a function of
+$\theta$. As previously we expet that for $\theta = 0$ all estimates will be
+equal to the pooled estimate, i.e.
+`r weighted.mean(sat_prep$y, 1/sat_prep$sd_err)` wheras for $\theta \to +\infty$
+the impact converges to their within-group estimate.
+
+```{R}
+snf_fit$mu %>%
+    as_tibble() %>%
+    mutate(tau = snf_fit$tau) %>%
+    pivot_longer(-tau) %>%
+    ggplot() +
+    aes(
+        x = tau,
+        y = value,
+        group = name
+    ) +
+    geom_smooth()
+```
+
+The result is reasonable, altough not as exact as we may have liked. This is due
+to the fact that we are essentially conditioning on the posterior distribution
+of $\tau$, and it just so happens that $\tau$ is very unlikely to be very
+close to zero.
+
+```{r}
+ggplot(tibble(tau = snf_fit$tau)) +
+    aes(x = tau) +
+    geom_density()
+```
+
+## Linear model with random effects
+
+This time we specify the same model a a linear model. In this case it will
+just be a single random effect, `y ~ 1 | scores_mean`.
+
+I don't see a way to specifiy observation variances in `lme4`, sooo, I'll
+simulate observations. This is not really good, since I don't know how many
+observations were in each school, so this is simulating "means" not
+observations. Oh well, let's see if we get a similar result.
+
+```{r}
+lme_fit <- sat_prep %>%
+    group_by(school) %>%
+    summarize(
+        scores = rnorm(1000, y, sqrt(1000) * sat_prep$sd_err),
+        .groups = "drop"
+    ) %>%
+    lmer(scores ~ 0 + (1 | school), data = .)
+lme_fit %>% summary()
+lme_fit %>% ranef()
+```
+
+And not at all, the random effect just appear to fit the empirical mean.
+I realize now that `lmer` does fit "random" effects but does not attempt
+to do so in a bayesian context, and I don't really understand exactly how
+it's doing what it is doing, maybe it estimates the modes or means of the
+posterior distributions. After looking into it slightly, lmer does some sort of
+maximum likelihood estimation, which in my understanding corresponds to
+maximizing the posterior distribution with flat priors.
+
+I am not satisfied with the way I simulated variances. I think that setting the
+weights sould allow me to integrate the known standard errors into the model.
+
+```{R}
+lme_fit2 <- lmer(
+    y ~ 0 + (1 | school),
+    data = sat_prep,
+    weights = 1 / sat_prep$sd_err
+)
+lme_fit2 %>% summary()
+lme_fit2 %>% ranef()
+```
+
+Getting `number of levels of each grouping factor must be < number of observations (problems: school)`
+error, I don't see why. Even if solving this via matricies we have N = K, which
+has an exact solution.
+
+
+## Linear model with random effects (stan)
+
+Expressing this problem as a linear model is essentially a change in notation.
+To fit this new approach we express school membership as a matrix, here an
+identity matrix.
+
+See (Stan documentation)[https://mc-stan.org/docs/2_26/stan-users-guide/multivariate-hierarchical-priors-section.html#fnref6]
+on hierarchial models for a better way to implement this.
+
+```{r}
+school_lm_model <- c("
+data {
+    int<lower=0> N; // number of observations
+    int<lower=0> K_fixed;
+    int<lower=0> K_rand;
+    matrix[N, K_rand] Z; // random effects
+    matrix[N, K_fixed] X; // Fixed effects
+    matrix[N, N] Sigma; // Observation variance structure
+    vector[N] y;
+}
+parameters {
+    vector[K_fixed] beta;
+    vector[K_rand] gamma;
+    real<lower=0> tau;
+}
+transformed parameters {
+}
+model {
+    y ~ multi_normal(X * beta + Z * gamma, Sigma);
+    gamma ~ normal(0, tau);
+    tau ~ cauchy(0, 2.5);
+}")
+
+school_lm_fit <- stan(
+    model_code = school_lm_model,
+    data = list(
+        N = nrow(sat_prep),
+        K_fixed = 1,
+        K_rand = nrow(sat_prep),
+        X = cbind(rep(1, nrow(sat_prep))),
+        Z = diag(nrow(sat_prep)),
+        Sigma = diag(sat_prep$sd_err),
+        y = sat_prep$y
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+school_lm_fit
+lm_fit <- rstan::extract(school_lm_fit)
+```
+
+We now introduced an intercept, therefore the average "random" effect is 0.
+
+
+## Linear model with random effects (stan)
+
+
+```{r}
+library(rstanarm)
+
+stan_lme_fit <- stan_lmer(
+    y ~ 0 + (1 | school),
+    data = sat_prep,
+    weights = 1 / sat_prep$sd_err,
+    prior = NULL # Flat priors, like what I have done above
+)
+slme_matrix <- rstan::extract(stan_lme_fit$stanfit)
+```
+
+Compare thee models hierarchial normal, manual hierarchial linear model,
+hierarchial linear model from `rstanarm`.
+
+```{r}
+snf_fit %>% str()
+lm_fit %>% str()
+slme_matrix %>% str()
+# gamma
+cbind(
+    nomral = snf_fit$mu %>% apply(2, quantile, 0.5),
+    my_hlm = (lm_fit$gamma + rep(lm_fit$beta, 4)) %>% apply(2, quantile, 0.5),
+    # my_hlm = (lm_fit$gamma + 0) %>% apply(2, quantile, 0.5),
+    stan_lmer = (slme_matrix$b[, -9]) %>% apply(2, quantile, 0.5)
+)
+# mu
+cbind(
+    nomral = snf_fit$theta %>% quantile(0.5),
+    my_hlm = lm_fit$beta %>% apply(2, quantile, 0.5),
+    stan_lmer = slme_matrix$b[, 9] %>% quantile(0.5)
+)
+```
+
+Not quite sure how to explain the differences
+
+
+# Exercice 15.2
+
+
+```{R}
+block_data <- tibble(
+    A = c(89, 84, 81, 87, 79),
+    B = c(88, 77, 87, 92, 81),
+    C = c(97, 92, 87, 89, 80),
+    D = c(94, 79, 85, 84, 88)
+) %>%
+    mutate(block = as.factor(seq_len(n()))) %>%
+    pivot_longer(-block, values_to = "response", names_to = "treatment")
+```
+
+## a
+
+Using `lm`:
+
+```{r}
+anova_model <- lm(response ~ treatment + block, data = block_data)
+summary(anova_model)
+anova(anova_model)
+```
+
+Using `stan`:
+
+```{r}
+lm_stan_model <- c("
+data {
+    int<lower=0> N;
+    int<lower=0> K;
+    matrix[N, K] X;
+    vector[N] y;
+}
+parameters {
+    vector[K] beta;
+    real<lower=0> sigma;
+}
+transformed parameters {
+}
+model {
+    y ~ normal(X * beta, sigma);
+}
+generated quantities {
+    vector[N] y_post;
+    for (i in 1:N) {
+        y_post[i] = normal_rng(X[i,] * beta, sigma);
+    }
+}
+")
+
+
+block_data_stan_lm <- stan(
+    model_code = lm_stan_model,
+    data = list(
+        N = nrow(block_data),
+        K = 8,
+        X = model.matrix(response ~ treatment + block, data = block_data),
+        y = block_data$response
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+simuls_stan_lm <- rstan::extract(block_data_stan_lm)
+post_y_stan_lm <- rstan::extract(block_data_stan_lm, "y_post")
+```
+
+First we compare the coefficients as a sanity check.
+
+```{R}
+simuls_stan_lm$beta %>%
+    apply(2, mean) %>%
+    round()
+coefficients(anova_model) %>% unname()
+```
+
+
+## b
+
+We're going to assume that probabilty to be in each block is equal. So we just
+need to average over the predicted values. I would think this would give
+results very similar to simply comparing betas, but let's see.
+
+Note that to "average over the blocks" I randomly choose one of the 5 blocks
+in each simulation.
+
+```{r}
+post_simuls <- cbind(block_data, t(post_y_stan_lm$y_post)) %>%
+    select(-response) %>%
+    pivot_longer(-c(treatment, block), values_to = "y_post", names_to = "sim") %>%
+    group_by(sim, treatment) %>%
+    filter(block == sample(block, 1)) %>%
+    ungroup()
+
+post_simuls |>
+    group_by(treatment) |>
+    summarize(average_yield = mean(y_post))
+```
+
+Now probabilty of being best :
+
+```{R}
+post_simuls |>
+    group_by(treatment, sim) |>
+    summarize(y_post = mean(y_post), .groups = "drop") %>%
+    group_by(sim) %>%
+    summarize(best = treatment[which.max(y_post)], .groups = "drop") %>%
+    pull(best) %>%
+    fct_count(prop = TRUE)
+```
+
+Distribution of differences in yield :
+
+```{r}
+post_simuls |>
+    group_by(treatment, sim) |>
+    summarize(y_post = mean(y_post), .groups = "drop") %>%
+    group_by(sim) %>%
+    summarize(range = diff(range(y_post)), .groups = "drop") %>%
+    pull(range) %>%
+    quantile(c(0, 0.025, 0.25, 0.5, 0.75, 0.975, 1))
+```
+
+## c
+
+We now add a hierarchial structure to the model by assuming that coefficents for
+blocks and treatments are pulls from same distribution.
+
+The intercept already captures the "constant" effect, therfore if we try
+to also estimate a non-zero mean of the hierarchial effect there are multiple
+equivalent parametrizations, introducing unnecessary redudnacy and dependency
+between parameters.
+
+There are the following parameters :
+
+* the intercept term $\beta_0$
+* block indicator variables
+    $\begin{pmatrix}
+        \beta_\text{block1}\\
+        \beta_\text{block2}\\
+        \beta_\text{block3}\\
+        \beta_\text{block4}\\
+        \beta_\text{block5}
+    \end{pmatrix}$
+* treatment indicator
+    $\begin{pmatrix}
+        \beta_\text{treatmentA}\\
+        \beta_\text{treatmentB}\\
+        \beta_\text{treatmentC}\\
+        \beta_\text{treatmentD}
+    \end{pmatrix}$
+* block indicator variables dispersion parameter $\sigma_\text{block}$
+* treatment indicator variables dispersion paramter $\sigma_\text{treatment}$
+
+The joint distribution for all the parametrs is ... normal ? For betas,
+probably, for variance components, unlikely.
+
+I mean, what distribution prior or posterior?
+Prior distribution can be written as
+$$
+p(\beta_0, \beta_\text{treatment},
+\beta_\text{block}, \sigma_\text{block},
+\sigma_\text{treatment}, \sigma) = 
+    p(\beta_0)
+    p(\beta_\text{treatment}|\sigma_\text{treatment})
+    p(\beta_\text{block}|\sigma_\text{treatment})
+    p(\sigma_\text{block})
+    p(\sigma_\text{treatment})
+    p(\sigma)
+$$
+
+Wheras the posterior is :
+
+$$
+p(\beta_0, \beta_\text{treatment},
+\beta_\text{block}, \sigma_\text{block},
+\sigma_\text{treatment}, \sigma | y) = 
+    p(y|\beta_0, \beta_\text{treatment},
+    \beta_\text{block}, \sigma)
+    p(\text{(prior)})
+$$
+
+## d (failed)
+
+Below is a failed attempt at applying EM for this problem. It would be better
+to go read chapter 13 first. Instead, I just use `stan` to fit the model
+and contine to other questions.
+
+First we setup the problem as a simple regression on an augmented dataset.
+We add just two lines, for the hierarchial parameters. Since we did not include
+an informative, no need to include this here.
+
+```{r, eval = FALSE}
+y <- block_data$response
+X <- model.matrix(
+    response ~ treatment + block,
+    block_data,
+    contrasts.arg = list(
+        treatment = contrasts(as.factor(block_data$treatment), contrasts = FALSE),
+        block = contrasts(as.factor(block_data$block), contrasts = FALSE)
+    )
+)
+
+# X_beta <- cbind(rep(c(1, 0), c(4, 5)), rep(c(0, 1), c(4, 5)))
+
+y_aug <- c(y, rep(0, 4 + 5))
+X_aug <- rbind(X, diag(ncol(X)))
+# Remove line corresponding to beta_0
+X_aug <- X_aug[-(length(y) + 1), ]
+
+# Fit the model, by starting with a very large variances
+lm_fit <- lm(response ~ treatment + block, data = block_data)
+sigma <- summary(lm_fit)$sigma
+sigmaT <- sd(coef(lm_fit)[2:4])
+sigmaB <- sd(coef(lm_fit)[5:8])
+
+M_step_sigma <- function(X, y, beta_hat, old_sigma, old_sigmaT, old_sigmaB) {
+    err <- X %*% beta_hat - y
+    c(
+        sigma = sum(err^2) / (2 * nrow(X)),
+        sigmaT = old_sigmaT^-2 * sum((1 + beta_hat[2:5]^2) / 8),
+        sigmaB = old_sigmaB^-2 * sum((1 + beta_hat[6:10]^2) / 10)
+    )
+}
+
+res <- tibble(
+    step = integer(0),
+    sigma = double(0),
+    sigmaT = double(0),
+    sigmaB = double(0)
+)
+
+for (i in seq_len(10)) {
+    Sigma_beta <- diag(rep(c(sigmaT, sigmaB)^2, c(4, 5)))
+    W <- solve(
+        rbind(
+            cbind(sigma^2 * diag(length(y)), matrix(0, ncol = 9, nrow = length(y))),
+            cbind(matrix(0, ncol = length(y), nrow = 9), Sigma_beta)
+        )
+    )
+    beta_hat <- solve(t(X_aug) %*% W %*% X_aug) %*% t(X_aug) %*% W %*% y_aug
+    sigma_res <- M_step_sigma(X_aug, y_aug, beta_hat, sigma, sigmaT, sigmaB)
+    sigma <- sigma_res[1]
+    sigmaT <- sigma_res[2]
+    sigmaB <- sigma_res[3]
+    res <- res %>% add_row(step = i, sigma, sigmaT, sigmaB)
+}
+```
+
+## d (using `stan`)
+
+```{r}
+lmh_stan_model <- c("
+data {
+    int<lower=0> N;
+    vector[N] y;
+    int<lower=1,upper=5> block[N];
+    int<lower=1,upper=4> treatment[N];
+}
+parameters {
+    real beta0;
+    vector[4] treatment_effect;
+    real treatment_tau;
+    vector[5] block_effect;
+    real block_tau;
+    real<lower=0> sigma;
+}
+transformed parameters {
+}
+model {
+    y ~ normal(beta0 + treatment_effect[treatment] + block_effect[block], sigma);
+    treatment_effect ~ normal(0, treatment_tau);
+    block_effect ~ normal(0, block_tau);
+}
+generated quantities {
+    real y_post[N];
+    y_post = normal_rng(beta0 + treatment_effect[treatment] + block_effect[block], sigma);
+}
+")
+
+block_data_stan_hlm <- stan(
+    model_code = lmh_stan_model,
+    data = list(
+        N = nrow(block_data),
+        y = block_data$response,
+        block = as.integer(block_data$block),
+        treatment = as.integer(as.factor(block_data$treatment))
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+block_data_stan_hlm
+simuls_stan_hlm <- rstan::extract(block_data_stan_hlm)
+post_y_stan_hlm <- rstan::extract(block_data_stan_hlm, "y_post")
+```
+
+Once again we calculate posterior probability of each block being best, and
+compare it to the same result from the non-hierarchial model.
+
+```{r}
+post_simuls_h <- bind_rows(
+    normal = cbind(block_data, t(post_y_stan_lm$y_post)),
+    hiera = cbind(block_data, t(post_y_stan_hlm$y_post)),
+    .id = "model"
+) %>%
+    as_tibble() %>%
+    select(-response) %>%
+    pivot_longer(
+        -c(model, treatment, block),
+        values_to = "y_post",
+        names_to = "sim"
+    ) %>%
+    group_by(model, sim, treatment) %>%
+    filter(block == sample(block, 1)) %>%
+    ungroup()
+
+post_simuls_h |>
+    group_by(model, treatment) |>
+    summarize(average_yield = mean(y_post)) %>%
+    pivot_wider(names_from = model, values_from = average_yield)
+```
+
+Note how hierarchial estimates are more pulled together.
+
+Now probabilty of being best :
+
+```{R}
+post_simuls_h |>
+    group_by(model, treatment, sim) |>
+    summarize(y_post = mean(y_post), .groups = "drop") %>%
+    group_by(model, sim) %>%
+    summarize(best = treatment[which.max(y_post)], .groups = "drop") %>%
+    group_by(model) %>%
+    summarize(fct_count(best, prop = TRUE), .groups = "drop") %>%
+    pivot_wider(id_cols = f, names_from = model, values_from = p)
+```
+
+Once again, hierarchial model somewhat restricts the coefficents, making all
+more coefficients similar.
+
+Distribution of differences in yield :
+
+```{r}
+post_simuls_h |>
+    group_by(model, treatment, sim) |>
+    summarize(y_post = mean(y_post), .groups = "drop") %>%
+    group_by(model, sim) %>%
+    summarize(range = diff(range(y_post)), .groups = "drop") %>%
+    group_by(model) %>%
+    summarize(
+        enframe(quantile(range, c(0, 0.025, 0.25, 0.5, 0.75, 0.975, 1))),
+        .groups = "drop"
+    ) %>%
+    pivot_wider(id_cols = model, names_from = name, values_from = value)
+```
+
+## e
+
+Dunno
+
+## f
+
+Done in (d)
+
+## g
+
+Unrelevent since I already used simulations. Otherwise hierarchial model reduced
+variance of the effects making large differences less likeley.
+
+
+# Exercice 15.3
+
+```{r}
+chemical <- tribble(
+    ~x1, ~x2, ~x3, ~y,
+    1300, 7.5, 0.0120, 49.0,
+    1300, 9.0, 0.0120, 50.2,
+    1300, 11.0, 0.0115, 50.5,
+    1300, 13.5, 0.0130, 48.5,
+    1300, 17.0, 0.0135, 47.5,
+    1300, 23.0, 0.0120, 44.5,
+    1200, 5.3, 0.0400, 28.0,
+    1200, 7.5, 0.0380, 31.5,
+    1200, 11.0, 0.0320, 34.5,
+    1200, 13.5, 0.0260, 35.0,
+    1200, 17.0, 0.0340, 38.0,
+    1200, 23.0, 0.0410, 38.5,
+    1100, 5.3, 0.0840, 15.0,
+    1100, 7.5, 0.0980, 17.0,
+    1100, 11.0, 0.0920, 20.5,
+    1100, 17.0, 0.0860, 19.5
+)
+```
+
+Lets visualize the data 
+
+```{r}
+chemical %>%
+    pivot_longer(c(x1, x2, x3)) %>%
+    ggplot() +
+    aes(
+        x = value,
+        y = y
+    ) +
+    geom_point() +
+    facet_wrap(vars(name), scales = "free_x")
+
+lm(y ~ x1 + x2 + x3, data = chemical) %>% summary()
+lm(y ~ poly(x1, x2, x3, degree = 2), data = chemical) %>% summary()
+```
+
+## a
+
+```{r}
+chemical_lm_model <- c("
+data {
+    int<lower=0> N;
+    int<lower=0> K;
+    matrix[N, K-1] X;
+    vector[N] y;
+}
+parameters {
+    real beta0;
+    vector[K-1] beta;
+    real<lower=0> sigma;
+}
+transformed parameters {
+}
+model {
+    y ~ normal(beta0 + X * beta, sigma);
+}
+generated quantities {
+    real y_post[N];
+    y_post = normal_rng(beta0 + X * beta, sigma);
+}
+")
+chemical_lm <- stan(
+    model_code = chemical_lm_model,
+    data = list(
+        N = nrow(chemical),
+        K = 10,
+        X = model.matrix(
+            y ~ 0 + poly(x1, x2, x3, degree = 2),
+            # y ~ 0 + x1 * x2 + x1 * x3 + x2 * x3 + I(x1^2) + I(x2^2) + I(x3^2),
+            data = chemical
+        ),
+        y = chemical$y
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+chemical_lm
+chemical_lm_sims <- rstan::extract(chemical_lm)
+chemical_lm_post <- rstan::extract(chemical_lm, "y_post")$y_post
+```
+
+I'm getting pretty bad results, i.e. convergence problems. This is likely due to
+the correlation betwen $X$ components even before polynomial effects. Using
+orthagonal polynomials seems to help greatly.
+
+## b
+
+```{r}
+chemical_hlm_model <- c("
+data {
+    int<lower=0> N;
+    int<lower=0> K;
+    matrix[N, K-1] X;
+    vector[N] y;
+}
+parameters {
+    real beta0;
+    vector[K-1] beta;
+    real<lower=0> sigma;
+    real<lower=0> tau;
+}
+transformed parameters {
+}
+model {
+    y ~ normal(beta0 + X * beta, sigma);
+    beta ~ normal(0, tau);
+}
+generated quantities {
+    real y_post[N];
+    y_post = normal_rng(beta0 + X * beta, sigma);
+}
+")
+chemical_hlm <- stan(
+    model_code = chemical_hlm_model,
+    data = list(
+        N = nrow(chemical),
+        K = 10,
+        X = model.matrix(
+            # y ~ 0 + poly(x1, 2) + poly(x2, 2) + poly(x3, 2) + x1:x2 + x1:x3 + x2:x3,
+            y ~ 0 + poly(x1, x2, x3, degree = 2),
+            data = chemical
+        ),
+        y = chemical$y
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+chemical_hlm
+chemical_hlm_sims <- rstan::extract(chemical_hlm)
+chemical_hlm_post <- rstan::extract(chemical_hlm, "y_post")$y_post
+```
+
+Curiously, the hierarchial components seems to help make the problem more
+identifiable, and does not seem to run into the same problems as the linear
+model without othagonal speicification. If nothing else, this specification
+makes the model much more tractable.
+
+```{r}
+cbind(
+    lm = c(summary(chemical_lm)$summary[1:11, 1], tau = NA),
+    hlm = summary(chemical_hlm)$summary[1:12, 1]
+)
+```
+
+Now lets view the posterior $\tau$ component
+
+```{r}
+ggplot(NULL, aes(x = chemical_hlm_sims$tau)) +
+    geom_density()
+```
+
+And compare the predictive posteorior distributions for the mean of the
+response.
+
+```{r}
+cbind(
+    hlm = chemical_hlm_post[1, ],
+    lm = chemical_lm_post[1, ],
+    data = chemical$y
+)
+bind_rows(
+    lm = chemical_lm_post %>% apply(1, mean) %>% enframe(),
+    hlm = chemical_hlm_post %>% apply(1, mean) %>% enframe(),
+    .id = "model"
+) %>%
+    ggplot() +
+    aes(x = value, group = model, color = model) +
+    geom_density() +
+    geom_function(
+        aes(group = 0),
+        fun = ~ dnorm(., mean(chemical$y), sd(chemical$y) / sqrt(nrow(chemical))),
+        color = "purple"
+    )
+```
+
+## d
+
+```{r}
+chemical_tlm_model <- c("
+data {
+    int<lower=0> N;
+    int<lower=0> K;
+    matrix[N, K-1] X;
+    vector[N] y;
+}
+parameters {
+    real beta0;
+    vector[K-1] beta;
+    real<lower=0> sigma;
+    real<lower=0> tau;
+}
+transformed parameters {
+}
+model {
+    y ~ normal(beta0 + X * beta, sigma);
+    // beta ~ normal(0, tau);
+    beta ~ student_t(4, 0, tau);
+}
+generated quantities {
+    real y_post[N];
+    y_post = normal_rng(beta0 + X * beta, sigma);
+}
+")
+chemical_tlm <- stan(
+    model_code = chemical_tlm_model,
+    data = list(
+        N = nrow(chemical),
+        K = 10,
+        X = model.matrix(
+            # y ~ 0 + poly(x1, 2) + poly(x2, 2) + poly(x3, 2) + x1:x2 + x1:x3 + x2:x3,
+            y ~ 0 + poly(x1, x2, x3, degree = 2),
+            data = chemical
+        ),
+        y = chemical$y
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+chemical_tlm
+chemical_tlm_sims <- rstan::extract(chemical_tlm)
+chemical_tlm_post <- rstan::extract(chemical_tlm, "y_post")$y_post
+```
+
+```{r}
+bind_rows(
+    lm = chemical_lm_post %>% apply(1, mean) %>% enframe(),
+    hlm = chemical_hlm_post %>% apply(1, mean) %>% enframe(),
+    tlm = chemical_tlm_post %>% apply(1, mean) %>% enframe(),
+    .id = "model"
+) %>%
+    ggplot() +
+    aes(x = value, group = model, color = model) +
+    geom_density() +
+    geom_function(
+        aes(group = 0),
+        fun = ~ dnorm(., mean(chemical$y), sd(chemical$y) / sqrt(nrow(chemical))),
+        color = "purple"
+    )
+```
+
+# Exercice 15.4
+
+p413
+
+```{r}
+sat_prep <- tribble(
+    ~school, ~y, ~sd,
+    "A",     28, 15,
+    "B",     8,  10,
+    "C",     -3, 16,
+    "D",     7,  11,
+    "E",     -1, 9,
+    "F",     1,  11,
+    "G",     18, 10,
+    "H",     12, 18
+)
+
+n_treatment <- 30
+n_control <- 30
+
+mean_sd <- sqrt(pop_var / n)
+
+school_hlm_model <- c("
+data {
+    int<lower=0> N;
+    int<lower=0> K;
+    matrix[N, K] X;
+    vector[N] sigma;
+    vector[N] y;
+}
+parameters {
+    real beta0;
+    vector[K] beta;
+    // real<lower=0> sigma;
+    real<lower=0> tau;
+}
+transformed parameters {
+}
+model {
+    y ~ normal(beta0 + X * beta, sigma);
+    beta ~ normal(0, tau);
+}
+// generated quantities {
+//     real y_post[N];
+//     y_post = normal_rng(beta0 + X * beta, sigma);
+// }
+")
+X <- model.matrix(
+    y ~ 0 + school,
+    contrasts = list(school = contr.treatment(n_distinct(sat_prep$school), contrasts = FALSE)),
+    data = sat_prep
+)
+
+school_hlm <- stan(
+    model_code = school_hlm_model,
+    data = list(
+        N = nrow(sat_prep),
+        K = 8,
+        X = X,
+        sigma = sat_prep$sd,
+        y = sat_prep$y
+    ),
+    chains = 4,
+    warmup = 1e3,
+    iter = 2e3,
+    cores = 1
+)
+```
+
+In this case there is only one batch of coefficients, with the constraint that
+their expectation is equal to 0, or equivilantly that their sum is 0.
+
+We can thus express
+
+# Parathèse anova
+
+```{r}
+iris
+iris_lm <- lm(Sepal.Length ~ Species + Sepal.Width, data = iris)
+summary(iris_lm)
+anova(iris_lm)
+
+y <- iris$Sepal.Length
+x <- model.matrix(Sepal.Length ~ Species + Sepal.Width, data = iris)
+# Full model
+x %*% (coef(iris_lm) * c(1, 1, 1, 1))
+
+
+ss_total <- sum((y - mean(y))^2)
+ss_residual <- sum((y - x %*% (coef(iris_lm) * c(1, 1, 1, 1)))^2)
+iris_lm_sans_width <- lm(Sepal.Length ~ Species, data = iris)
+ss_width <- sum((x %*% (coef(iris_lm) * c(1, 1, 1, 1)) - x[, -4] %*% coef(iris_lm_sans_width))^2)
+iris_lm_intercept <- lm(Sepal.Length ~ 1, data = iris)
+ss_species <- sum((x[, -4] %*% coef(iris_lm_sans_width) - x[, 1] * coef(iris_lm_intercept))^2)
+
+
+ss_total
+ss_residual + ss_width + ss_species
+sum((x[, c(1, 2, 3)] %*% coef(iris_lm)[1:3])^2)
+
+# width
+coef(iris_lm)
+
+var(y)
+mean()
+
+object <- iris_lm
+p <- object$rank
+p1 <- 1L:p
+comp <- object$effects[p1]
+asgn <- object$assign[stats:::qr.lm(object)$pivot][p1]
+nmeffects <- c("(Intercept)", attr(object$terms, "term.labels"))
+tlabels <- nmeffects[1 + unique(asgn)]
+ss <- c(unlist(lapply(split(comp^2, asgn), sum)), ssr)
+df <- c(lengths(split(asgn, asgn)), dfr)
+```
+
+
+

@@ -1,0 +1,114 @@
+---
+title: "BDA: Chapter 10 exercices"
+author: "OS"
+output: html_document
+---
+
+```{r, include = FALSE}
+source("R/setup.R")
+```
+
+# Exercice 1
+
+## a
+
+Not sure if this can count as "mathematically", but deriving the sd of a quantile
+of the normal distribution doesn't seem to be particularly easy.
+
+Let $\{x_i\}_{i \in 1,\dots,n}$ be an $n$ sample of $\theta$. We are intrested in
+bounding the sd of its $p$th, that we write $\theta_{(\lceil np\rceil)}$. Note
+that the number observations that falls above the $p$th quantile follows a
+$\text{Binom}(n, p)$ distribution. We use this fact to estimate the sd.
+
+The mean and sd of this distribution is $np$ and $\sqrt{np(1-p)}$ respectively.
+We estimate the sd of the quantile as $\frac{1}{2}(
+\theta_{(\text{round}(np + \sqrt{np(1-p)}))} -
+\theta_{(\text{round}(np - \sqrt{np(0-p)}))}
+)$.
+
+
+An interesting note, I first took the floor and ceiling for the lower and upper
+quantile respetively, this however gave biased results. The calculated sd was
+too large. Rounding appers to give much better results.
+
+Another way to do this is to use the (known but ugly) distribution of each
+quantile, and determine its sd.
+
+## b
+
+We check the above result via simulations. First we implemented the above
+procedure.
+
+```{r}
+quantile_sd <- function(x, p) {
+    n <- length(x)
+    e_b <- binom <- n * p
+    sd_b <- sqrt(n * p * (1 - p))
+    up <- round(e_b + sd_b)
+    lo <- round(e_b - sd_b)
+    ord <- sort(x, decreasing = FALSE)
+    0.5 * (ord[up] - ord[lo])
+}
+
+# test, reasonable enough
+quantile_sd(runif(1000), 0.5)
+quantile_sd(runif(10), 0.5)
+quantile_sd(runif(10), 0.9)
+```
+
+
+To test how well this works, we calculate the real sd via simulations.
+
+```{r}
+p <- 0.975
+n <- 100
+sd(replicate(1e3, quantile(rnorm(n, 0, 1), p)))
+mean(replicate(1e3, quantile_sd(rnorm(n, 0, 1), p)))
+```
+
+We can even do better by comparing the sd over various sample sizes.
+
+```{r}
+n <- c(1:100, seq(from = 100, to = 10e3, by = 100))
+true_sd <- sapply(
+    n,
+    \(n) sd(replicate(100, quantile(rnorm(n, 0, 1), p)))
+)
+estim_sd <- sapply(
+    n,
+    \(n) mean(replicate(1e3, quantile_sd(rnorm(n, 0, 1), p)))
+)
+
+bind_rows(
+    true = enframe(true_sd),
+    estim = enframe(estim_sd),
+    .id = "type"
+) %>%
+    mutate(n = rep(n, 2)) %>%
+    ggplot() +
+    aes(
+        x = n,
+        y = value,
+        color = type,
+        group = type
+    ) +
+    geom_line() +
+    geom_hline(yintercept = 0.1 * 1)
+```
+
+This pretty much allows 
+
+# Checking Vim
+
+A mistake in a sentense.
+
+```{lua}
+vim.lsp.start({
+   name = 'My R LSP',
+   cmd = {'R.exe', '--slave', '-e', 'languageserver::run()'},
+   root_dir = 'C:/Documents/Projects/bayes',
+})
+```
+
+
+
